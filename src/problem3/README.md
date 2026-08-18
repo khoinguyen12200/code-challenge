@@ -2,7 +2,7 @@
 
 - `original.tsx` — the snippet exactly as given (kept for reference; it doesn't type-check on
   purpose, see issue #1).
-- `WalletPage.tsx` — the refactored version.
+- [`WalletPage.tsx`](WalletPage.tsx) — the refactored version.
 - `assumed-deps.ts` — minimal stand-ins for `BoxProps`, `useWalletBalances`, `usePrices`,
   `WalletRow`, and `classes`, which the original snippet references but doesn't define. These
   exist only so the refactor is real, type-checkable code instead of a fragment; run
@@ -27,49 +27,51 @@
 
 **Computational inefficiencies**
 
-6. `getPriority` is called up to twice per comparison inside `sort`, on top of once per item in
-   `filter` — the same value recomputed repeatedly instead of computed once per balance and
-   reused.
+6. `getPriority` is redefined as a brand-new closure on every render, and uses a `switch` on
+   string literals instead of a lookup table — so every one of the repeated calls made during
+   `filter`/`sort` (up to twice per comparison) pays for a fresh function plus a multi-branch
+   string comparison, when a stable, module-level `Record` lookup would do the same job in O(1).
 7. Four separate full passes over the array (`filter`, `sort`, then two independent `.map` calls
    for `formattedBalances` and `rows`) where filtering/sorting once and formatting once is enough.
 8. `useMemo`'s dependency array includes `prices`, but the memoized computation never reads
    `prices` — every price update triggers a pointless recompute of the filter+sort.
-9. `getPriority` is redefined as a new closure on every render and uses a `switch` on string
-   literals instead of a lookup table.
 
 **Anti-patterns / type-safety**
 
-10. `getPriority(blockchain: any)` throws away type safety on exactly the value it's validating.
-11. Magic numbers (`100`, `50`, `30`, `20`, `-99`) with no named constants.
-12. `key={index}` in `rows.map` — unstable once the list is filtered/sorted, since array position
+9. `getPriority(blockchain: any)` throws away type safety on exactly the value it's validating.
+10. Magic numbers (`100`, `50`, `30`, `20`, `-99`) with no named constants.
+11. `key={index}` in `rows.map` — unstable once the list is filtered/sorted, since array position
     isn't a stable identity for a given balance.
-13. `children` is destructured from `props` but never rendered — dead code, and surprising for a
+12. `children` is destructured from `props` but never rendered — dead code, and surprising for a
     component that accepts `BoxProps` (implying it might be given children).
-14. `prices[balance.currency]` isn't guarded — not every currency has a price (true of the real
+13. `prices[balance.currency]` isn't guarded — not every currency has a price (true of the real
     feed used in Problem 2), so a missing price silently produces `NaN`.
 
 ## How WalletPage.tsx fixes each one
 
-- Priority is computed once per balance (`balances.map(...)` adding a `priority` field) and that
-  cached value is reused by both `filter` and `sort` — fixes #6, and as a side effect fixes #1/#2
-  since the filter now correctly reads `balance.amount > 0` off the right variable.
-- `blockchain: string` was added to `WalletBalance` (fixes #3), and `getPriority` takes `string`
-  instead of `any` (fixes #10).
-- `BLOCKCHAIN_PRIORITY` is a `Record<string, number>` with a named `UNKNOWN_BLOCKCHAIN_PRIORITY`
-  constant, declared at module scope so it isn't recreated every render (fixes #9, #11).
-- The sort comparator returns a numeric difference (`rhs.priority - lhs.priority`), which handles
-  the equal case correctly by returning `0` (fixes #5).
-- The pipeline is `map → filter → sort → map`: one pass to decorate with priority, filter and sort
-  reusing that cached value, then one final map that both drops the temporary `priority` field and
-  builds the `FormattedWalletBalance` shape — the unused `formattedBalances` variable and the
-  extra pass it caused are gone (fixes #4, #7).
-- `useMemo` now only depends on `balances`, matching what it actually reads (fixes #8). Building
-  the `rows` JSX is left as a plain `.map` outside `useMemo` — memoizing React elements themselves
-  isn't idiomatic since they're cheap to create; only the actual data pipeline needs the cache.
-- `key` is now `` `${blockchain}-${currency}` `` instead of array index — stable across re-sorts
-  (fixes #12).
-- The unused `children` destructure was removed. `rest` is spread onto the `<div>` as before, and
+- `getPriority` moved to module scope as a plain function over a `BLOCKCHAIN_PRIORITY`
+  `Record<string, number>`, with the sentinel named `UNKNOWN_BLOCKCHAIN_PRIORITY` instead of a
+  bare `-99` — fixes #6, #9, #10. Once it's an O(1) lookup instead of a `switch`-based closure
+  recreated every render, calling it a couple of times per element during `filter`/`sort` is
+  negligible, which is why the refactor does *not* bother pre-computing and caching a `priority`
+  field on each item — that would only be worth the added complexity if `getPriority` were doing
+  real work.
+- The `filter` predicate now reads `balance.amount > 0` (the correct condition, off the correct
+  variable — there is no `lhsPriority` anymore) — fixes #1, #2.
+- `blockchain: string` was added to `WalletBalance` — fixes #3.
+- The sort comparator returns a numeric difference (`rhs.priority - lhs.priority` via
+  `getPriority`), which naturally returns `0` for equal priorities instead of falling through to
+  `undefined` — fixes #5.
+- The pipeline is now `filter → sort → map`, one pass each, with the `map` both building the
+  `formatted` string and being the only place `FormattedWalletBalance` is produced — the unused
+  `formattedBalances` variable and the extra pass it caused are gone — fixes #4, #7.
+- `useMemo` now only depends on `balances`, matching what it actually reads. Building `rows` is
+  left as a plain `.map` outside `useMemo` — memoizing React elements themselves isn't idiomatic
+  since they're cheap to create; only the actual data pipeline needs the cache — fixes #8.
+- `key` is now `` `${blockchain}-${currency}` `` instead of array index — stable across re-sorts —
+  fixes #11.
+- The unused `children` destructure was removed; `props` is spread onto the `<div>` directly, and
   since the JSX children (`{rows}`) still take precedence over any `children` key that spreading
-  `rest` might carry, behavior is unchanged — just without the dead variable (fixes #13).
-- `prices[balance.currency] ?? 0` guards against a missing price instead of producing `NaN`
-  (fixes #14).
+  might carry, behavior is unchanged — just without the dead variable — fixes #12.
+- `prices[balance.currency] ?? 0` guards against a missing price instead of producing `NaN` —
+  fixes #13.

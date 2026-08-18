@@ -38,24 +38,15 @@ const WalletPage: FC<Props> = (props) => {
 
   // Only `balances` feeds this computation, so only `balances` belongs in the
   // dependency array — the original also re-ran this on every price tick for
-  // no reason. Priority is computed once per balance up front (instead of up
-  // to twice per comparison inside `sort`) and reused for both the filter and
-  // the sort.
+  // no reason. `getPriority` is now an O(1) Record lookup rather than a
+  // `switch`, so calling it a couple of times per element during sort/filter
+  // is negligible — not worth the extra ceremony of caching it on a
+  // temporary field and rebuilding each object to strip it back off.
   const sortedBalances = useMemo<FormattedWalletBalance[]>(() => {
-    const withPriority = balances.map((balance) => ({
-      ...balance,
-      priority: getPriority(balance.blockchain),
-    }));
-
-    return withPriority
-      .filter((balance) => balance.amount > 0 && balance.priority > UNKNOWN_BLOCKCHAIN_PRIORITY)
-      .sort((lhs, rhs) => rhs.priority - lhs.priority)
-      .map((balance) => ({
-        currency: balance.currency,
-        amount: balance.amount,
-        blockchain: balance.blockchain,
-        formatted: balance.amount.toFixed(),
-      }));
+    return balances
+      .filter((balance) => balance.amount > 0 && getPriority(balance.blockchain) > UNKNOWN_BLOCKCHAIN_PRIORITY)
+      .sort((lhs, rhs) => getPriority(rhs.blockchain) - getPriority(lhs.blockchain))
+      .map((balance) => ({ ...balance, formatted: balance.amount.toFixed() }));
   }, [balances]);
 
   const rows = sortedBalances.map((balance) => {
