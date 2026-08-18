@@ -11,5 +11,5 @@ We're cool as long as we can view your solution without any pain.
 
 ## Solutions ##
 - [Problem 1: Three ways to sum to n](src/problem1/README.md)
-- [Problem 2: Fancy Form](src/problem2/README.md)
-- [Problem 3: Messy React](src/problem3/README.md)
+- [Problem 2: Fancy Form](src/problem2/README.md) — [live demo](https://fancy-form-swap.khoi-dev-0212.workers.dev)
+- [Problem 3: Messy React](src/problem3/README.md) — [WalletPage.tsx](src/problem3/WalletPage.tsx)
