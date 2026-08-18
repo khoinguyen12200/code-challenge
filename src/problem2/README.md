@@ -3,6 +3,8 @@
 A currency swap form built with Vite + React + TypeScript, styled with plain CSS, animated with
 [Motion](https://motion.dev) (the Framer Motion successor).
 
+**Live demo:** https://fancy-form-swap.khoi-dev-0212.workers.dev
+
 ## Running it
 
 ```bash
@@ -10,6 +12,7 @@ npm install
 npm run dev      # dev server with HMR
 npm run build    # typecheck + production build
 npm run test     # unit + component tests (vitest)
+npm run deploy   # build + deploy the static output to Cloudflare Workers
 ```
 
 ## What it does
